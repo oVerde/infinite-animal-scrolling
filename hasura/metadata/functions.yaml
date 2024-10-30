@@ -1,0 +1,4 @@
+functions:
+  - function:
+      schema: public
+      name: get_random_gifs
