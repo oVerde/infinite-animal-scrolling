@@ -1,7 +1,14 @@
-import { createClient, gql, Provider, useQuery } from 'urql';
+import { useState } from "react";
+import { createClient, Provider } from "urql";
+import LazyImage from "./components/LazyImage";
+import { useCategories } from "./hook/useCategories";
+import { useGifCount } from "./hook/useGifCount";
+import { useInfiniteScroll } from "./hook/useInfiniteScroll";
+import { useGifs } from "./hook/useGifs";
+import { capitalizeFirstLetter } from "./utils";
 
 let client = createClient({
-  url: 'http://localhost:8080/v1/graphql',
+  url: "http://localhost:8080/v1/graphql",
 });
 
 function App() {
@@ -11,35 +18,86 @@ function App() {
         <SampleQuery />
       </div>
     </Provider>
-  )
+  );
 }
 
-export default App
+export default App;
 
-let query = gql`
-{
-  gifs_aggregate(where: {category: { _eq: "dog" }}) {
-    aggregate {
-      count
-    }
-  }
-}
-`
 function SampleQuery() {
-  let [result, reexecuteQuery] = useQuery({
-    query,
-  });
+  const [category, setCategory] = useState("");
+  const [page, setPage] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  let { data, fetching, error } = result;
+  const { data: categList } = useCategories();
+  const { data: countData } = useGifCount(category);
+  const { list, fetching, error } = useGifs(category, page, refreshKey);
 
-  if (fetching) return <p>Loading...</p>;
-  if (error) return <p>Oh no... {error.message}</p>;
+  useInfiniteScroll(() => setPage((prev) => prev + 1), fetching);
 
-  console.log({ data })
+  const handleCategChange = (e) => {
+    setCategory(e.target.value);
+    setPage(0);
+  };
+
+  // console.log({ countData });
+  // console.log(list);
+  // console.log({ gifsData });
+  // console.log({ gifsError });
+  // console.log(category);
+  // console.log(page);
+
   return (
-    <div>
-      This is a sample query on how to connect to GraphQL.
-      There are {data.gifs_aggregate.aggregate.count} dogs.
-    </div>
+    <>
+      <header>
+        <h1>Animal Scroller</h1>
+      </header>
+      <nav>
+        <select
+          type="text"
+          className="flex p-3 text-lg"
+          autoFocus={true}
+          placeholder="write a category, like 'cat'"
+          value={category}
+          onChange={handleCategChange}
+        >
+          <option value="">All</option>
+          {categList?.gifs_aggregate.nodes.map((item) => (
+            <option key={item.category} value={item.category}>
+              {capitalizeFirstLetter(item.category)}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={() => {
+            setPage(0);
+            setRefreshKey((prev) => prev + 1);
+          }}
+          className="text-lg"
+          title="reload"
+        >
+          🔁
+        </button>
+        <span className="text-[--palette-3]">
+          {!!category && countData?.gifs_aggregate.aggregate.count}
+        </span>
+      </nav>
+      <main>
+        {list.map((gif) => (
+          <LazyImage
+            key={gif.id}
+            alt={gif.category}
+            id={gif.id}
+            title={gif.id}
+            src={gif.url}
+          />
+        ))}
+      </main>
+      {!!fetching && (
+        <div className="mt-5 text-center">
+          More {!!category ? `${category}s` : "animals"} incoming...
+        </div>
+      )}
+      {!!error && <div>Failed to load 😿</div>}
+    </>
   );
 }
